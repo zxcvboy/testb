@@ -1,0 +1,88 @@
+_schema-version: '3.1'
+ID: testb
+version: 1.0.0-SNAPSHOT
+description: testb application
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install --production
+        - npx -p @sap/cds-dk cds build --production
+modules:
+  - name: testb-srv
+    type: java
+    path: srv
+    build-parameters:
+      builder: custom
+      commands:
+        - mvn clean package
+      build-result: 'target/*.[wj]ar'
+    requires:
+      - name: test-common-db
+        properties:
+          SPRING_PROFILES_ACTIVE: cloud
+      - name: testb-xsuaa
+      - name: Louis_destination
+      - name: conn-lite
+      - name: workflow_mta
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: '${default-url}'
+    description: d
+  - name: testb-db-deployer
+    type: hdb
+    path: db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: test-common-db
+  - name: testb-approuter
+    type: nodejs
+    path: approuter
+    parameters:
+      memory: 256M
+      disk-quota: 256M
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: dest-testb-srv
+          url: ~{srv-url}
+          forwardAuthToken: true          
+      - name: testb-xsuaa 
+    provides:
+      - name: app-url
+        properties:
+          url: '${default-url}' 
+resources:
+  - name: test-common-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+    properties:
+      hdi-service-name: '${service-name}'
+### XSUAA service instance      
+  - name: testb-xsuaa
+    parameters:
+      path: ./xs-security.json  
+      service: xsuaa    
+      service-plan: application
+      service-keys: 
+        - name: testb-xsuaa-key      
+    type: com.sap.xs.uaa
+### Destination service instance      
+  - name: Louis_destination 
+    type: destination  
+### Connectivity service instance      
+  - name: conn-lite 
+    type: connectivity  
+### Workflow service instance      
+  - name: workflow_mta 
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service: workflow
+      service-plan: standard
